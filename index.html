@@ -152,6 +152,52 @@
     .version-date{ text-align:left; }
     select{ min-width: 100%; }
   }
+
+  /* ===== QA Mission Challenge mode ===== */
+  .mode-grid{ display:grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin-top:16px; }
+  .mode-card{ background: var(--panel-hi); border:1px solid var(--border); border-radius:12px; padding:18px; cursor:pointer; transition: border-color 0.15s ease, transform 0.15s ease; }
+  .mode-card:hover{ border-color: var(--accent); transform: translateY(-2px); }
+  .mode-card .mc-emoji{ font-size:26px; margin-bottom:8px; }
+  .mode-card h3{ margin:0 0 6px; font-size:16px; }
+  .mode-card p{ margin:0; font-size:12.5px; color: var(--muted); line-height:1.5; }
+
+  .diff-grid{ display:grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin: 16px 0; }
+  .diff-card{ border-radius:12px; padding:16px; cursor:pointer; border:1px solid var(--border); background: var(--panel-hi); text-align:center; transition: transform 0.15s ease, border-color 0.15s ease; }
+  .diff-card:hover{ transform: translateY(-2px); }
+  .diff-card.easy{ border-color:#175c3a; }
+  .diff-card.easy:hover{ border-color: var(--good); }
+  .diff-card.moderate{ border-color:#7a5400; }
+  .diff-card.moderate:hover{ border-color:#ffb000; }
+  .diff-card.difficult{ border-color:#7a1f2a; }
+  .diff-card.difficult:hover{ border-color: var(--bad); }
+  .diff-card .emoji{ font-size:22px; }
+  .diff-card .lbl{ font-family: var(--font-mono); font-size:12px; text-transform:uppercase; letter-spacing:0.06em; margin-top:6px; }
+  .diff-card .xp{ font-size:11px; color: var(--muted); margin-top:4px; }
+
+  .cat-pill-row{ display:flex; flex-wrap:wrap; gap:8px; margin: 14px 0 4px; }
+  .cat-pill{ font-family: var(--font-mono); font-size:11.5px; padding:8px 13px; border-radius:20px; background: var(--panel-hi); border:1px solid var(--border); color: var(--muted); cursor:pointer; }
+  .cat-pill.active{ background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight:600; }
+
+  .xp-bar-wrap{ display:flex; align-items:center; gap:10px; font-family: var(--font-mono); font-size:12px; color: var(--muted); }
+  .xp-track{ flex:1; height:8px; border-radius:5px; background: var(--panel-hi); border:1px solid var(--border); overflow:hidden; }
+  .xp-fill{ height:100%; background: var(--accent); transition: width 0.5s ease; }
+
+  .q-progress{ font-family: var(--font-mono); font-size:11px; color: var(--muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.06em; }
+  .q-category-tag{ display:inline-block; font-family: var(--font-mono); font-size:10px; padding:3px 9px; border-radius:6px; background: var(--accent-soft); color: var(--accent); border:1px solid var(--accent-dim); margin-bottom:10px; text-transform:uppercase; letter-spacing:0.05em; }
+  .q-text{ font-size:17px; font-weight:600; margin-bottom:16px; line-height:1.5; }
+  .q-options{ display:flex; flex-direction:column; gap:10px; }
+  .q-opt{ text-align:left; padding:13px 16px; border-radius:10px; border:1px solid var(--border); background: var(--panel-hi); color: var(--text); cursor:pointer; font-family: var(--font-display); font-size:14px; transition: border-color 0.15s ease, background 0.15s ease; }
+  .q-opt:hover{ border-color: var(--accent); }
+  .q-opt.correct-pick{ border-color: var(--good); background: rgba(61,220,132,0.10); }
+  .q-opt.wrong-pick{ border-color: var(--bad); background: rgba(255,93,108,0.10); }
+  .q-opt.reveal-correct{ border-color: var(--good); }
+  .q-feedback{ margin-top:14px; padding:12px 14px; border-radius:0 8px 8px 0; font-size:13.5px; border-left:3px solid var(--border); background: var(--panel-hi); }
+  .q-feedback.ok{ border-left-color: var(--good); }
+  .q-feedback.no{ border-left-color: var(--bad); }
+  .xp-toast{ display:inline-block; font-family: var(--font-mono); font-size:12px; font-weight:700; color: var(--accent); background: var(--accent-soft); border:1px solid var(--accent-dim); border-radius:8px; padding:4px 10px; margin-left:8px; }
+
+  .bugrush-timer{ font-family: var(--font-mono); font-size:28px; font-weight:700; text-align:center; color: var(--accent); margin: 4px 0 14px; }
+  .bugrush-timer.low{ color: var(--bad); }
 </style>
 </head>
 <body class="era-1">
@@ -493,6 +539,76 @@ const RANKS = [
   { min: 4, title: "QA Lead", emoji: "👑", note: "You separated root cause from masking factors across every era, and made the release call. That's the whole craft." }
 ];
 
+/* =========================================================
+   QA MISSION CHALLENGE — knowledge question system
+   Difficulty tiers + category tags. This bank is a seed set
+   (structured the same way for every question) that's easy
+   to extend to the hundreds envisioned in the design doc —
+   just push more objects into the matching array.
+   ========================================================= */
+
+const CHALLENGE_RANKS = [
+  { min: 0,    title: "QA Intern" },
+  { min: 150,  title: "Junior Tester" },
+  { min: 400,  title: "QA Engineer" },
+  { min: 750,  title: "Automation Specialist" },
+  { min: 1200, title: "Senior QA Engineer" },
+  { min: 1800, title: "QA Architect" },
+  { min: 2500, title: "Guardian of Quality" }
+];
+
+const CATEGORIES = ["Bug Investigation","Test Case Creation","Exploratory Testing","Automation Testing","API Testing","Database Testing","Security Testing","Performance Testing","Agile & Process"];
+
+const QUESTION_BANK = {
+  easy: [
+    { cat:"Bug Investigation", q:"What is the main purpose of Software Testing?", options:["To create software","To find defects and improve quality","To replace developers","To increase project cost"], correct:1, explain:"Testing exists to surface defects early and confirm the product meets quality expectations — not to build features." },
+    { cat:"Bug Investigation", q:"Which document contains steps to reproduce a bug?", options:["User Manual","Bug Report","Database Schema","Release Note"], correct:1, explain:"A bug report captures reproduction steps, expected vs. actual results, and environment details so anyone can confirm the defect." },
+    { cat:"Test Case Creation", q:"A tester checks if a login page works using valid credentials. What type of testing is this?", options:["Positive Testing","Security Testing","Performance Testing","Load Testing"], correct:0, explain:"Verifying expected behavior with valid input is the definition of positive testing." },
+    { cat:"Bug Investigation", q:"What should a QA tester include when reporting a defect?", options:["Personal opinion","Steps to reproduce and expected result","Developer's name","Project budget"], correct:1, explain:"A useful bug report is reproducible and objective: steps, expected result, actual result, environment." },
+    { cat:"Agile & Process", q:"What does QA stand for?", options:["Quality Analysis","Quality Assurance","Quick Application","Query Access"], correct:1, explain:"QA = Quality Assurance: the practices that build confidence a product meets requirements." },
+    { cat:"Test Case Creation", q:"Which SDLC phase typically comes right before testing?", options:["Requirements gathering","Development / implementation","Deployment","Maintenance"], correct:1, explain:"In a standard SDLC, code is developed first, then tested before deployment." },
+    { cat:"Exploratory Testing", q:"What is exploratory testing best described as?", options:["Testing strictly from a pre-written script","Simultaneous learning, test design, and execution without a fixed script","Only automated regression testing","Testing done exclusively by end users"], correct:1, explain:"Exploratory testing is unscripted — the tester learns the app and designs tests on the fly, often uncovering issues scripted cases miss." },
+    { cat:"Database Testing", q:"In SQL, which statement retrieves data from a table?", options:["INSERT","DELETE","SELECT","UPDATE"], correct:2, explain:"SELECT reads rows from a table; INSERT/UPDATE/DELETE modify data." },
+    { cat:"Security Testing", q:"What is the main goal of authentication testing?", options:["Verifying users are who they claim to be","Verifying page load speed","Verifying color contrast","Verifying database backups"], correct:0, explain:"Authentication testing confirms identity-verification mechanisms (login, tokens, MFA) work correctly and can't be bypassed." },
+    { cat:"Performance Testing", q:"What does 'load testing' primarily measure?", options:["How the system behaves under expected user volume","How pretty the UI looks","How many bugs exist in the code","How long a meeting should be"], correct:0, explain:"Load testing checks system behavior (response time, stability) under a realistic, expected level of concurrent usage." },
+    { cat:"Automation Testing", q:"Which of these is a browser automation tool?", options:["Selenium","Photoshop","Excel","Slack"], correct:0, explain:"Selenium (along with tools like Playwright and Cypress) automates browser interactions for testing." },
+    { cat:"Agile & Process", q:"In a typical Agile sprint, what does a 'user story' primarily describe?", options:["A technical database schema","A feature from the end user's perspective and its value","A bug report","A deployment script"], correct:1, explain:"User stories describe functionality from the user's point of view, usually in a 'as a ___, I want ___, so that ___' format." }
+  ],
+  moderate: [
+    { cat:"Test Case Creation", q:"A username field accepts 5-20 characters. Which values should be tested?", options:["1, 10, 50","4, 5, 20, 21","10 only","100 only"], correct:1, explain:"Boundary Value Analysis: test just outside and just inside each boundary — 4 (invalid), 5 (valid min), 20 (valid max), 21 (invalid)." },
+    { cat:"Bug Investigation", q:"A developer fixes a payment issue. What should QA test first?", options:["Only the fixed issue","Related payment and checkout functionality","Homepage design","User profile page"], correct:1, explain:"Regression testing: a fix in one area can ripple into related flows, so nearby functionality needs re-verification, not just the reported bug." },
+    { cat:"API Testing", q:"An API returns status code 200 but incorrect user information. What type of defect is this?", options:["UI defect","Data validation defect","Network defect","Hardware defect"], correct:1, explain:"A 200 means the request succeeded at the transport level — the problem is in the data returned, which is a data validation/logic defect." },
+    { cat:"Automation Testing", q:"A test fails randomly without any code changes. What is the possible cause?", options:["Flaky test","New feature","Documentation issue","User error"], correct:0, explain:"Intermittent failures with no code change are the classic signature of a flaky test — though as with any flake, the underlying cause is worth tracing rather than dismissing." },
+    { cat:"Agile & Process", q:"In Agile, who works closely with QA during development?", options:["Only customers","Developers and Product Owners","Only managers","Marketing team"], correct:1, explain:"QA collaborates continuously with developers (on implementation/testability) and product owners (on acceptance criteria)." },
+    { cat:"Database Testing", q:"Which SQL clause would you use to find duplicate email entries in a users table?", options:["ORDER BY email","GROUP BY email HAVING COUNT(*) > 1","WHERE email IS NULL","DELETE FROM users"], correct:1, explain:"GROUP BY email with HAVING COUNT(*) > 1 isolates email values that appear more than once — the standard duplicate-finding pattern." },
+    { cat:"Security Testing", q:"A regular user can access another user's account data by changing an ID in the URL. What vulnerability is this?", options:["SQL Injection","Insecure Direct Object Reference (IDOR)","Cross-Site Scripting (XSS)","DDoS"], correct:1, explain:"IDOR occurs when an app exposes internal object references (like a user ID) without checking whether the requester is authorized to access that object." },
+    { cat:"Performance Testing", q:"What's the key difference between load testing and stress testing?", options:["They are identical","Load testing checks expected traffic; stress testing pushes beyond capacity to find the breaking point","Load testing is manual; stress testing is automated","Stress testing only applies to databases"], correct:1, explain:"Load testing validates behavior at expected/peak traffic; stress testing intentionally exceeds capacity to see how and when the system fails." },
+    { cat:"API Testing", q:"When validating a JSON API response, which is the most complete check?", options:["Status code only","Status code, schema/field presence, and data correctness","Response time only","HTTP method only"], correct:1, explain:"A thorough API check confirms the status code, that expected fields exist with correct types, and that the actual values are correct — not just one of these." },
+    { cat:"Exploratory Testing", q:"What's a good use of a 'charter' in session-based exploratory testing?", options:["A rigid step-by-step script with no deviation","A short mission statement guiding what area/risk to explore within a time-box","A list of all possible bugs in the app","A finalized bug report"], correct:1, explain:"A charter gives exploratory testing focus (what to investigate, what risk to target) while still leaving room for the tester's judgment." },
+    { cat:"Automation Testing", q:"Why might a Cypress or Playwright test use an explicit wait for an element instead of a fixed sleep(5000)?", options:["Fixed sleeps are always faster","Explicit waits adapt to actual load time, reducing flakiness and wasted time","sleep() is not supported by any framework","There's no difference"], correct:1, explain:"Explicit/conditional waits proceed as soon as the condition is met, making tests both faster on average and less flaky than a blind fixed delay." },
+    { cat:"Bug Investigation", q:"A bug report says 'the app is slow.' What's the QA engineer's best next step?", options:["Close the ticket as invalid","Ask for specifics: which action, expected vs actual time, environment, and reproduce it", "Assume it's the network", "Immediately escalate to production incident"], correct:1, explain:"Vague reports need to be turned into measurable, reproducible facts before they can be triaged or fixed." }
+  ],
+  difficult: [
+    { cat:"Bug Investigation", q:"Production users report duplicate payments after checkout. What should QA investigate first?", options:["UI colors","Transaction flow and API requests, especially retry/idempotency handling","User profile pictures","Browser theme"], correct:1, explain:"Duplicate payments are almost always a transaction/idempotency issue — e.g. a retried request creating a second charge — so the transaction flow and API layer are the first place to look." },
+    { cat:"Automation Testing", q:"Automation tests pass locally but fail in CI/CD. What should QA check first?", options:["Test environment differences (config, data, timing, dependencies)","The developer's personal computer","The application logo","Random user feedback"], correct:0, explain:"Local-vs-CI discrepancies are almost always environmental: different data seeds, timing/concurrency, missing env vars, or dependency versions." },
+    { cat:"Agile & Process", q:"A release has 5000 test cases, 4900 passed, 100 failed — including 1 payment failure and 2 data-loss issues. Should QA approve release?", options:["Yes, pass rate is 98%","No — block release due to critical risk despite a high pass rate","Ignore the bugs and ship","Delete the failing tests so the report looks clean"], correct:1, explain:"Pass-rate percentage doesn't capture severity. A payment failure and data-loss bugs are release-blocking regardless of how good the aggregate numbers look." },
+    { cat:"Bug Investigation", q:"A bug can't be reproduced after deployment. What should QA collect before giving up?", options:["Logs, environment details, timestamps, and exact user actions","Developer opinion only","A single screenshot only","Nothing — mark it Cannot Reproduce and close it"], correct:0, explain:"Hard-to-reproduce bugs need corroborating evidence — logs, timestamps, environment/config, and precise user actions — before being written off." },
+    { cat:"Agile & Process", q:"A requirement says 'System should be fast.' What should QA do?", options:["Start testing immediately using personal judgment of 'fast'","Push back and ask for measurable, testable performance criteria (e.g. response time under X ms at Y load)","Ignore the requirement entirely","Remove the feature from scope"], correct:1, explain:"Untestable requirements need to be converted into measurable acceptance criteria before meaningful test cases can be designed." },
+    { cat:"Security Testing", q:"A penetration test finds that expired session tokens are still accepted by the API. What's the most likely root cause category?", options:["Frontend CSS bug","Server-side session/token validation not properly checking expiry","Missing favicon","Slow database indexing"], correct:1, explain:"If an expired token still authenticates, the server-side validation logic isn't correctly checking expiry — a session-management defect with real security impact." },
+    { cat:"Performance Testing", q:"A load test shows response time is fine up to 500 concurrent users, then degrades sharply at 550. What should QA report this as?", options:["A random anomaly, ignore it","A likely capacity/scaling threshold (e.g. connection pool or resource limit) worth investigating before that traffic level is reached in production","Proof the app can never scale","A UI bug"], correct:1, explain:"A sharp knee in the response-time curve typically points to a specific resource limit (DB connections, thread pool, memory) being exhausted — valuable, actionable capacity information." },
+    { cat:"Database Testing", q:"After a data migration, row counts match between old and new databases, but some financial totals don't. What should QA check next?", options:["Nothing further — row counts matching is sufficient","Data transformation/mapping logic and precision handling (e.g. rounding, currency conversion) during migration","The UI font size","The server's uptime"], correct:1, explain:"Matching row counts only confirms completeness, not correctness — mismatched totals point to a transformation, rounding, or mapping defect in the migration logic." },
+    { cat:"API Testing", q:"An API's documented rate limit is 100 requests/minute, but testing shows it accepts 300 before blocking. What severity would a QA lead most reasonably assign?", options:["Low — cosmetic issue","Medium-to-High — a rate-limiting/security control isn't enforcing as designed, which could enable abuse","Not a bug, it's a feature","Critical UI defect"], correct:1, explain:"Rate limits are often a security/cost control; silently allowing 3x the documented limit is a real enforcement gap, not a minor issue." },
+    { cat:"Exploratory Testing", q:"During exploratory testing, you notice an edge case that isn't in any existing test plan and seems risky. What's the best next step?", options:["Ignore it since it's not in the test plan","Log it as a new potential defect/risk with evidence, and consider adding a test case to formalize coverage","Fix the code yourself without telling anyone","Wait until the next major release to mention it"], correct:1, explain:"Exploratory testing exists precisely to surface gaps scripted plans miss — the finding should be documented and fed back into planned coverage." },
+    { cat:"Automation Testing", q:"Your team is deciding what to automate first for a new checkout flow. What's generally the best prioritization?", options:["Automate the rarest edge cases first","Automate high-frequency, stable, business-critical paths first (e.g. core checkout success path)","Automate whatever is easiest to script, regardless of value","Automate nothing until 100% of manual cases exist"], correct:1, explain:"Automation ROI is highest on stable, frequently-run, high-value paths — that's where regression protection pays off fastest." },
+    { cat:"Bug Investigation", q:"Two different teams report the 'same' bug with slightly different symptoms in different environments. What should QA do first?", options:["Assume they're unrelated and close both","Compare environment, data, and version details across both reports to determine if they share a root cause before merging or splitting the tickets","Merge them immediately without investigation","Assign both randomly to any available engineer"], correct:1, explain:"Symptom differences can come from environment or data differences even when the underlying defect is the same — or they can be genuinely separate bugs. That needs to be verified before merging tickets, not assumed." }
+  ]
+};
+
+const XP_BY_DIFFICULTY = { easy: 10, moderate: 25, difficult: 50 };
+const BONUS_FIRST_TRY = 20;
+const BONUS_FAST = 15;
+const FAST_THRESHOLD_MS = 8000;
+
 let state = {
   levelIndex: 0,
   score: 0,
@@ -500,25 +616,64 @@ let state = {
   hintUsed: [false,false,false,false],
   firstTryCorrect: [null,null,null,null],
   selectedGuess: null,
-  screen: 'intro', // intro | briefing | board | verdict | whys | releaseDecision | final
+  screen: 'intro', // intro | briefing | board | verdict | whys | releaseDecision | final | modeSelect | ...
   whysStep: 0,
   whysPickedWrong: [],
   releaseChoice: null,
-  releaseScore: 0
+  releaseScore: 0,
+
+  // QA Mission Challenge state
+  challenge: {
+    xp: 0,
+    difficulty: null,        // 'easy' | 'moderate' | 'difficult'
+    category: 'All',
+    queue: [],                // shuffled question objects for this session
+    index: 0,
+    selected: null,
+    correctCount: 0,
+    totalCount: 0,
+    qStartTime: null,
+    lastEarned: 0
+  },
+
+  // Bug Rush mode state
+  bugRush: {
+    active: false,
+    timeLeft: 300,
+    timerId: null,
+    queue: [],
+    index: 0,
+    selected: null,
+    correctCount: 0,
+    attempted: 0,
+    xp: 0
+  }
 };
 
 const app = document.getElementById('app');
 
 function render(){
-  const lvl = LEVELS[state.levelIndex];
-  document.body.className = lvl ? lvl.eraKey : 'era-4';
+  const challengeScreens = ['modeSelect','challengeSetup','challengeQuestion','challengeSummary','bugRushIntro','bugRushPlay','bugRushSummary'];
+  if(!challengeScreens.includes(state.screen)){
+    const lvl = LEVELS[state.levelIndex];
+    document.body.className = lvl ? lvl.eraKey : 'era-4';
+  } else {
+    document.body.className = 'era-1';
+  }
   if(state.screen === 'intro') return renderIntro();
-  if(state.screen === 'briefing') return renderBriefing(lvl);
-  if(state.screen === 'board') return renderBoard(lvl);
-  if(state.screen === 'verdict') return renderVerdict(lvl);
-  if(state.screen === 'whys') return renderWhys(lvl);
+  if(state.screen === 'briefing') return renderBriefing(LEVELS[state.levelIndex]);
+  if(state.screen === 'board') return renderBoard(LEVELS[state.levelIndex]);
+  if(state.screen === 'verdict') return renderVerdict(LEVELS[state.levelIndex]);
+  if(state.screen === 'whys') return renderWhys(LEVELS[state.levelIndex]);
   if(state.screen === 'releaseDecision') return renderReleaseDecision();
   if(state.screen === 'final') return renderFinal();
+  if(state.screen === 'modeSelect') return renderModeSelect();
+  if(state.screen === 'challengeSetup') return renderChallengeSetup();
+  if(state.screen === 'challengeQuestion') return renderChallengeQuestion();
+  if(state.screen === 'challengeSummary') return renderChallengeSummary();
+  if(state.screen === 'bugRushIntro') return renderBugRushIntro();
+  if(state.screen === 'bugRushPlay') return renderBugRushPlay();
+  if(state.screen === 'bugRushSummary') return renderBugRushSummary();
 }
 
 function timelineBar(){
@@ -563,13 +718,330 @@ function renderIntro(){
         does the noise you'll have to see through.
       </p>
       <div class="btn-row">
-        <button class="btn" onclick="startGame()">Begin Investigation</button>
+        <button class="btn" onclick="state.screen='modeSelect'; render();">Choose Your Mission</button>
       </div>
     </div>
   `;
 }
 
 function startGame(){ state.screen = 'briefing'; render(); }
+
+function renderModeSelect(){
+  app.innerHTML = `
+    ${brandBar()}
+    <div class="card">
+      <div class="eyebrow">Guardians of Quality</div>
+      <h2>Choose Your Mission</h2>
+      <p class="lead">Debug real regressions across four eras of QA history, drill your knowledge with tiered
+      challenge questions, or race the clock in Bug Rush.</p>
+      <div class="mode-grid">
+        <div class="mode-card" onclick="startGame()">
+          <div class="mc-emoji">🕰️</div>
+          <h3>Debug the Past</h3>
+          <p>Story mode. Trace 4 real regressions to their true root cause across Junior, Automation, AI, and QA Lead eras.</p>
+        </div>
+        <div class="mode-card" onclick="state.screen='challengeSetup'; render();">
+          <div class="mc-emoji">🎖️</div>
+          <h3>QA Mission Challenge</h3>
+          <p>Easy, Moderate, and Difficult knowledge missions across bug investigation, automation, API, security, performance, and more. Earn XP and rank up.</p>
+        </div>
+        <div class="mode-card" onclick="state.screen='bugRushIntro'; render();">
+          <div class="mc-emoji">🔥</div>
+          <h3>Bug Rush Mode</h3>
+          <p>5 minutes on the clock. Answer as many QA questions correctly as you can before time runs out.</p>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/* ---------- QA Mission Challenge ---------- */
+
+function shuffled(arr){ return [...arr].sort(()=>Math.random()-0.5); }
+
+function challengeRank(xp){
+  let r = CHALLENGE_RANKS[0];
+  for(const c of CHALLENGE_RANKS){ if(xp >= c.min) r = c; }
+  return r;
+}
+
+function renderChallengeSetup(){
+  const cats = ['All', ...CATEGORIES];
+  const cat = state.challenge.category;
+
+  app.innerHTML = `
+    ${brandBar()}
+    <div class="card">
+      <div class="eyebrow">QA Mission Challenge</div>
+      <h2>Select Your Mission Difficulty</h2>
+      <div class="xp-bar-wrap">
+        <span>${challengeRank(state.challenge.xp).title}</span>
+        <div class="xp-track"><div class="xp-fill" style="width:${Math.min(100, (state.challenge.xp % 400) / 4)}%"></div></div>
+        <span>${state.challenge.xp} XP</span>
+      </div>
+      <p class="lead" style="margin-top:14px;">Optional: filter by category first, then pick a difficulty to begin.</p>
+      <div class="cat-pill-row">
+        ${cats.map(c => `<div class="cat-pill ${cat===c?'active':''}" onclick="setChallengeCategory('${c.replace(/'/g,"\\'")}')">${c}</div>`).join('')}
+      </div>
+      <div class="diff-grid">
+        <div class="diff-card easy" onclick="beginChallenge('easy')">
+          <div class="emoji">🟢</div>
+          <div class="lbl">Easy</div>
+          <div class="xp">QA Intern / Junior Tester · +10 XP</div>
+        </div>
+        <div class="diff-card moderate" onclick="beginChallenge('moderate')">
+          <div class="emoji">🟡</div>
+          <div class="lbl">Moderate</div>
+          <div class="xp">QA Engineer · +25 XP</div>
+        </div>
+        <div class="diff-card difficult" onclick="beginChallenge('difficult')">
+          <div class="emoji">🔴</div>
+          <div class="lbl">Difficult</div>
+          <div class="xp">Senior QA / QA Lead · +50 XP</div>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn secondary" onclick="state.screen='modeSelect'; render();">Back</button>
+      </div>
+    </div>
+  `;
+}
+
+function setChallengeCategory(cat){ state.challenge.category = cat; render(); }
+
+function beginChallenge(difficulty){
+  const cat = state.challenge.category;
+  let pool = QUESTION_BANK[difficulty];
+  if(cat !== 'All') pool = pool.filter(q => q.cat === cat);
+  if(pool.length === 0) pool = QUESTION_BANK[difficulty]; // fallback if a category has no questions at this tier
+
+  state.challenge.difficulty = difficulty;
+  state.challenge.queue = shuffled(pool);
+  state.challenge.index = 0;
+  state.challenge.selected = null;
+  state.challenge.correctCount = 0;
+  state.challenge.totalCount = 0;
+  state.challenge.qStartTime = Date.now();
+  state.screen = 'challengeQuestion';
+  render();
+}
+
+function renderChallengeQuestion(){
+  const c = state.challenge;
+  const q = c.queue[c.index];
+
+  if(!q){ state.screen = 'challengeSummary'; render(); return; }
+
+  const showFeedback = c.selected !== null && c.selected !== undefined;
+  const isCorrect = showFeedback && c.selected === q.correct;
+
+  const optionsHtml = q.options.map((opt,i) => {
+    let cls = 'q-opt';
+    if(showFeedback){
+      if(i === q.correct) cls += ' reveal-correct';
+      if(i === c.selected && i !== q.correct) cls += ' wrong-pick';
+      if(i === c.selected && i === q.correct) cls += ' correct-pick';
+    }
+    return `<div class="${cls}" onclick="answerChallenge(${i})">${opt}</div>`;
+  }).join('');
+
+  let feedbackHtml = '';
+  if(showFeedback){
+    let xpLine = isCorrect ? `<span class="xp-toast">+${c.lastEarned} XP</span>` : '';
+    feedbackHtml = `<div class="q-feedback ${isCorrect?'ok':'no'}">${q.explain}${xpLine}</div>`;
+  }
+
+  app.innerHTML = `
+    ${brandBar()}
+    <div class="card">
+      <div class="xp-bar-wrap" style="margin-bottom:14px;">
+        <span>${challengeRank(c.xp).title}</span>
+        <div class="xp-track"><div class="xp-fill" style="width:${Math.min(100, (c.xp % 400) / 4)}%"></div></div>
+        <span>${c.xp} XP</span>
+      </div>
+      <div class="q-progress">${c.difficulty.toUpperCase()} · Question ${c.index + 1} of ${c.queue.length}</div>
+      <div class="q-category-tag">${q.cat}</div>
+      <div class="q-text">${q.q}</div>
+      <div class="q-options">${optionsHtml}</div>
+      ${feedbackHtml}
+      <div class="btn-row">
+        ${showFeedback ? `<button class="btn" onclick="nextChallengeQuestion()">${c.index === c.queue.length - 1 ? 'Finish Mission' : 'Next Question'}</button>` : ''}
+        <button class="btn secondary" onclick="state.screen='challengeSetup'; render();">Exit Mission</button>
+      </div>
+    </div>
+  `;
+}
+
+function answerChallenge(i){
+  const c = state.challenge;
+  const q = c.queue[c.index];
+  if(c.selected !== null && c.selected !== undefined) return;
+  c.selected = i;
+  c.totalCount += 1;
+  const correct = i === q.correct;
+  const elapsed = Date.now() - c.qStartTime;
+  let earned = 0;
+  if(correct){
+    earned += XP_BY_DIFFICULTY[c.difficulty];
+    earned += BONUS_FIRST_TRY;
+    if(elapsed <= FAST_THRESHOLD_MS) earned += BONUS_FAST;
+    c.correctCount += 1;
+  }
+  c.lastEarned = earned;
+  c.xp += earned;
+  render();
+}
+
+function nextChallengeQuestion(){
+  state.challenge.index += 1;
+  state.challenge.selected = null;
+  state.challenge.qStartTime = Date.now();
+  render();
+}
+
+function renderChallengeSummary(){
+  const c = state.challenge;
+  const rank = challengeRank(c.xp);
+  app.innerHTML = `
+    ${brandBar()}
+    <div class="card">
+      <div class="eyebrow">Mission Report</div>
+      <h2>${c.difficulty ? c.difficulty[0].toUpperCase()+c.difficulty.slice(1) : ''} Mission Complete</h2>
+      <div class="rank-badge">🎖️ RANK: ${rank.title}</div>
+      <div class="stat-grid">
+        <div class="stat"><div class="num">${c.correctCount}/${c.queue.length}</div><div class="lbl">Correct</div></div>
+        <div class="stat"><div class="num">${c.xp}</div><div class="lbl">Total QA XP</div></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn" onclick="state.screen='challengeSetup'; render();">New Mission</button>
+        <button class="btn secondary" onclick="state.screen='modeSelect'; render();">Mode Select</button>
+      </div>
+    </div>
+  `;
+}
+
+/* ---------- Bug Rush Mode ---------- */
+
+function renderBugRushIntro(){
+  app.innerHTML = `
+    ${brandBar()}
+    <div class="card">
+      <div class="eyebrow">Bug Rush Mode</div>
+      <h2>🔥 5 Minutes. As Many Bugs As You Can Find.</h2>
+      <p class="lead">Questions are pulled from every difficulty tier at random. Answer fast, answer accurately —
+      the clock doesn't stop for anyone.</p>
+      <div class="btn-row">
+        <button class="btn" onclick="startBugRush()">Start the Clock</button>
+        <button class="btn secondary" onclick="state.screen='modeSelect'; render();">Back</button>
+      </div>
+    </div>
+  `;
+}
+
+function startBugRush(){
+  if(state.bugRush.timerId) clearInterval(state.bugRush.timerId);
+  const allQ = shuffled([...QUESTION_BANK.easy, ...QUESTION_BANK.moderate, ...QUESTION_BANK.difficult]);
+  state.bugRush = {
+    active: true, timeLeft: 300, timerId: null,
+    queue: allQ, index: 0, selected: null,
+    correctCount: 0, attempted: 0, xp: 0
+  };
+  state.screen = 'bugRushPlay';
+  render();
+  state.bugRush.timerId = setInterval(tickBugRush, 1000);
+}
+
+function tickBugRush(){
+  state.bugRush.timeLeft -= 1;
+  if(state.bugRush.timeLeft <= 0){
+    clearInterval(state.bugRush.timerId);
+    state.bugRush.active = false;
+    state.screen = 'bugRushSummary';
+    render();
+    return;
+  }
+  // Only re-render the timer digits, not the whole question, to avoid disrupting a click
+  const t = document.getElementById('bugrush-time');
+  if(t){
+    const m = Math.floor(state.bugRush.timeLeft/60), s = state.bugRush.timeLeft%60;
+    t.textContent = `${m}:${s.toString().padStart(2,'0')}`;
+    t.className = 'bugrush-timer' + (state.bugRush.timeLeft <= 30 ? ' low' : '');
+  }
+}
+
+function renderBugRushPlay(){
+  const b = state.bugRush;
+  if(b.index >= b.queue.length){ b.queue = b.queue.concat(shuffled([...QUESTION_BANK.easy, ...QUESTION_BANK.moderate, ...QUESTION_BANK.difficult])); }
+  const q = b.queue[b.index];
+  const m = Math.floor(b.timeLeft/60), s = b.timeLeft%60;
+
+  const showFeedback = b.selected !== null && b.selected !== undefined;
+  const optionsHtml = q.options.map((opt,i) => {
+    let cls = 'q-opt';
+    if(showFeedback){
+      if(i === q.correct) cls += ' reveal-correct';
+      if(i === b.selected && i !== q.correct) cls += ' wrong-pick';
+    }
+    return `<div class="${cls}" onclick="answerBugRush(${i})">${opt}</div>`;
+  }).join('');
+
+  app.innerHTML = `
+    ${brandBar()}
+    <div class="card">
+      <div id="bugrush-time" class="bugrush-timer${b.timeLeft<=30?' low':''}">${m}:${s.toString().padStart(2,'0')}</div>
+      <div class="xp-bar-wrap" style="margin-bottom:14px;">
+        <span>Correct: ${b.correctCount}/${b.attempted}</span>
+        <div class="xp-track"><div class="xp-fill" style="width:${Math.min(100, b.xp/10)}%"></div></div>
+        <span>${b.xp} XP</span>
+      </div>
+      <div class="q-category-tag">${q.cat}</div>
+      <div class="q-text">${q.q}</div>
+      <div class="q-options">${optionsHtml}</div>
+      <div class="btn-row">
+        ${showFeedback ? `<button class="btn" onclick="nextBugRush()">Next Bug</button>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+function answerBugRush(i){
+  const b = state.bugRush;
+  if(b.selected !== null && b.selected !== undefined) return;
+  const q = b.queue[b.index];
+  b.selected = i;
+  b.attempted += 1;
+  if(i === q.correct){
+    b.correctCount += 1;
+    b.xp += 50; // "Found Hidden Bug" style bonus pace for rapid mode
+  }
+  render();
+}
+
+function nextBugRush(){
+  state.bugRush.index += 1;
+  state.bugRush.selected = null;
+  render();
+}
+
+function renderBugRushSummary(){
+  const b = state.bugRush;
+  app.innerHTML = `
+    ${brandBar()}
+    <div class="card">
+      <div class="eyebrow">Time's Up</div>
+      <h2>🔥 Bug Rush Results</h2>
+      <div class="stat-grid">
+        <div class="stat"><div class="num">${b.correctCount}</div><div class="lbl">Bugs Found</div></div>
+        <div class="stat"><div class="num">${b.attempted}</div><div class="lbl">Attempted</div></div>
+        <div class="stat"><div class="num">${b.xp}</div><div class="lbl">XP Earned</div></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn" onclick="state.screen='bugRushIntro'; render();">Run It Back</button>
+        <button class="btn secondary" onclick="state.screen='modeSelect'; render();">Mode Select</button>
+      </div>
+    </div>
+  `;
+}
 
 function renderBriefing(lvl){
   app.innerHTML = `
@@ -877,6 +1349,7 @@ function renderFinal(){
         instinct — and knowing when to hold a release — doesn't.</div>
       </div>
       <div class="btn-row">
+        <button class="btn" onclick="state.screen='modeSelect'; render();">Try QA Mission Challenge</button>
         <button class="btn secondary" onclick="restartGame()">Play Again</button>
       </div>
     </div>
@@ -884,12 +1357,16 @@ function renderFinal(){
 }
 
 function restartGame(){
+  if(state.bugRush && state.bugRush.timerId) clearInterval(state.bugRush.timerId);
+  const prevXp = state.challenge ? state.challenge.xp : 0;
   state = {
     levelIndex: 0, score: 0, activeTab: 'versions',
     hintUsed: [false,false,false,false],
     firstTryCorrect: [null,null,null,null],
     selectedGuess: null, screen: 'intro',
-    whysStep: 0, whysPickedWrong: [], releaseChoice: null, releaseScore: 0
+    whysStep: 0, whysPickedWrong: [], releaseChoice: null, releaseScore: 0,
+    challenge: { xp: prevXp, difficulty: null, category: 'All', queue: [], index: 0, selected: null, correctCount: 0, totalCount: 0, qStartTime: null, lastEarned: 0 },
+    bugRush: { active: false, timeLeft: 300, timerId: null, queue: [], index: 0, selected: null, correctCount: 0, attempted: 0, xp: 0 }
   };
   render();
 }
