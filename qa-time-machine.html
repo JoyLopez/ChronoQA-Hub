@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QA Time Machine: Debug the Past</title>
+<style>
+  :root{
+    --bg: #0a0d13;
+    --bg2: #0e1219;
+    --panel: #131822;
+    --panel-hi: #171d2a;
+    --border: #232b3a;
+    --text: #e7ecf3;
+    --muted: #7c8699;
+    --good: #3ddc84;
+    --bad: #ff5d6c;
+    --font-display: 'Space Grotesk','Segoe UI',system-ui,-apple-system,sans-serif;
+    --font-mono: 'JetBrains Mono','Fira Code',ui-monospace,Menlo,Consolas,monospace;
+    --accent: #4af626;
+    --accent-dim: #1f6b12;
+    --accent-soft: rgba(74,246,38,0.12);
+    --scan-op: 0.10;
+  }
+  body.era-2{ --accent: #ffb000; --accent-dim: #7a5400; --accent-soft: rgba(255,176,0,0.12); --scan-op: 0.07; }
+  body.era-3{ --accent: #8f6bff; --accent-dim: #4b2e99; --accent-soft: rgba(143,107,255,0.14); --scan-op: 0.045; }
+  body.era-4{ --accent: #5b9bef; --accent-dim: #274a80; --accent-soft: rgba(91,155,239,0.12); --scan-op: 0.0; }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{
+    background: radial-gradient(circle at 50% -10%, var(--bg2), var(--bg) 60%);
+    color: var(--text); font-family: var(--font-display);
+    min-height:100vh; overflow-x:hidden; transition: background 0.8s ease;
+  }
+  .scanlines{
+    pointer-events:none; position:fixed; inset:0; z-index:50;
+    background: repeating-linear-gradient(to bottom, rgba(255,255,255,0.6) 0px, rgba(255,255,255,0.6) 1px, transparent 1px, transparent 3px);
+    opacity: var(--scan-op); mix-blend-mode: overlay; transition: opacity 0.8s ease;
+  }
+  .vignette{ pointer-events:none; position:fixed; inset:0; z-index:49; box-shadow: inset 0 0 180px rgba(0,0,0,0.55); }
+  #app{ position:relative; z-index:1; max-width:1100px; margin:0 auto; padding: 28px 20px 60px; }
+
+  .timeline-bar{ display:flex; align-items:center; justify-content:space-between; margin-bottom: 30px; gap: 8px; }
+  .timeline-track{ position:relative; flex:1; height:2px; background: var(--border); margin: 0 6px; }
+  .timeline-track::before{ content:""; position:absolute; left:0; top:0; height:100%; width: var(--progress, 0%); background: var(--accent); transition: width 0.6s ease, background 0.6s ease; }
+  .era-node{ display:flex; flex-direction:column; align-items:center; gap:6px; min-width:64px; }
+  .era-dot{ width:14px; height:14px; border-radius:50%; border:2px solid var(--border); background: var(--panel); transition: all 0.4s ease; }
+  .era-node.done .era-dot{ background: var(--accent); border-color: var(--accent); }
+  .era-node.active .era-dot{ background: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); animation: pulse 1.6s infinite; }
+  @keyframes pulse{ 0%,100%{ box-shadow: 0 0 0 4px var(--accent-soft);} 50%{ box-shadow: 0 0 0 8px transparent;} }
+  .era-label{ font-size:10.5px; letter-spacing:0.06em; color:var(--muted); font-family: var(--font-mono); text-align:center; text-transform:uppercase; }
+  .era-node.active .era-label, .era-node.done .era-label{ color: var(--text); }
+
+  .brand{ display:flex; align-items:center; justify-content:space-between; margin-bottom: 18px; }
+  .brand h1{ font-size: 20px; margin:0; letter-spacing:0.02em; }
+  .brand h1 span{ color: var(--accent); }
+  .brand .score{ font-family: var(--font-mono); font-size:13px; color: var(--muted); background: var(--panel); border:1px solid var(--border); padding:6px 12px; border-radius:8px; }
+  .brand .score b{ color: var(--accent); }
+
+  .card{ background: var(--panel); border:1px solid var(--border); border-radius: 14px; padding: 22px 24px; margin-bottom:18px; }
+  .eyebrow{ font-family: var(--font-mono); font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color: var(--accent); margin-bottom:8px; }
+  h2{ font-size: 24px; margin: 0 0 12px; }
+  p.lead{ color: var(--muted); line-height:1.6; font-size:15px; }
+  .btn{
+    font-family: var(--font-display); font-weight:600; font-size:14px; cursor:pointer;
+    background: var(--accent); color:#0a0d13; border:none; border-radius:9px; padding:12px 22px;
+    transition: transform 0.15s ease, filter 0.15s ease;
+  }
+  .btn:hover{ filter:brightness(1.08); transform: translateY(-1px); }
+  .btn:active{ transform: translateY(0); }
+  .btn.secondary{ background: transparent; color: var(--text); border: 1px solid var(--border); }
+  .btn.secondary:hover{ border-color: var(--accent); color: var(--accent); }
+  .btn:disabled{ opacity:0.4; cursor:not-allowed; transform:none; }
+  .btn-row{ display:flex; gap:12px; flex-wrap:wrap; margin-top: 18px; }
+
+  .tabs{ display:flex; gap:6px; margin-bottom:14px; flex-wrap:wrap; }
+  .tab{ font-family: var(--font-mono); font-size:12.5px; padding:9px 14px; border-radius:8px; background: var(--panel); border:1px solid var(--border); color:var(--muted); cursor:pointer; }
+  .tab.active{ color: var(--bg); background: var(--accent); border-color: var(--accent); font-weight:600; }
+
+  .version-row{ display:grid; grid-template-columns: 96px 1fr 90px; gap: 14px; padding: 13px 4px; border-bottom:1px solid var(--border); align-items:start; }
+  .version-row:last-child{ border-bottom:none; }
+  .version-id{ font-family: var(--font-mono); color: var(--accent); font-weight:700; font-size:13px; }
+  .version-desc{ font-size:14px; line-height:1.5; }
+  .version-date{ font-family: var(--font-mono); font-size:11px; color: var(--muted); text-align:right; }
+  .tag{ display:inline-block; font-family: var(--font-mono); font-size:10px; letter-spacing:0.05em; text-transform:uppercase; padding:2px 7px; border-radius:5px; margin-top:6px; border:1px solid var(--border); color:var(--muted); }
+  .tag.feature{ color:#5b9bef; border-color:#274a80; }
+  .tag.refactor{ color:#ffb000; border-color:#7a5400; }
+  .tag.fix{ color:#3ddc84; border-color:#175c3a; }
+  .tag.chore{ color:#9aa4b8; }
+  .tag.ai{ color:#8f6bff; border-color:#4b2e99; }
+
+  .ticket{ padding:14px; border:1px solid var(--border); border-radius:10px; margin-bottom:10px; background: var(--panel-hi); }
+  .ticket-meta{ font-family: var(--font-mono); font-size:11px; color:var(--muted); margin-bottom:6px; }
+  .ticket-body{ font-size:14px; line-height:1.5; }
+
+  table.testgrid{ width:100%; border-collapse: collapse; font-size:13px; }
+  table.testgrid th, table.testgrid td{ border:1px solid var(--border); padding:9px 8px; text-align:center; }
+  table.testgrid th{ font-family: var(--font-mono); font-size:11px; color: var(--muted); background: var(--panel-hi); }
+  table.testgrid td.name{ text-align:left; font-size:12.5px; color: var(--text); }
+  .pass{ color: var(--good); font-weight:700; }
+  .fail{ color: var(--bad); font-weight:700; }
+  .test-note{ font-size:11px; color:var(--muted); margin-top:10px; font-style:italic; }
+
+  .accuse-box{ display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+  select{ font-family: var(--font-mono); font-size:13.5px; background: var(--panel-hi); color: var(--text); border:1px solid var(--border); border-radius:8px; padding:11px 14px; min-width:260px; }
+  .hint-box{ margin-top:14px; padding:12px 14px; border-left:3px solid var(--accent); background: var(--accent-soft); font-size:13px; border-radius: 0 8px 8px 0; }
+
+  .verdict-banner{ padding: 16px 18px; border-radius:10px; margin-bottom: 16px; font-weight:700; font-size:16px; }
+  .verdict-banner.correct{ background: rgba(61,220,132,0.12); color: var(--good); border:1px solid rgba(61,220,132,0.35); }
+  .verdict-banner.wrong{ background: rgba(255,93,108,0.12); color: var(--bad); border:1px solid rgba(255,93,108,0.35); }
+  .lesson{ margin-top:16px; padding:14px 16px; background: var(--panel-hi); border-radius:10px; border:1px solid var(--border); }
+  .lesson .eyebrow{ margin-bottom:6px; }
+
+  .rank-badge{ display:inline-block; font-family: var(--font-mono); font-size:13px; padding:6px 14px; border-radius:20px; background: var(--accent-soft); color: var(--accent); border:1px solid var(--accent-dim); margin-bottom:14px; }
+  .stat-grid{ display:grid; grid-template-columns: repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin: 16px 0; }
+  .stat{ background: var(--panel-hi); border:1px solid var(--border); border-radius:10px; padding:14px; text-align:center; }
+  .stat .num{ font-family: var(--font-mono); font-size:24px; color: var(--accent); font-weight:700; }
+  .stat .lbl{ font-size:11px; color: var(--muted); text-transform:uppercase; letter-spacing:0.05em; margin-top:4px; }
+
+  /* Root Cause Chain (5 Whys) */
+  .whys-progress{ display:flex; gap:6px; margin-bottom:16px; }
+  .whys-progress .dot{ flex:1; height:4px; border-radius:3px; background: var(--border); }
+  .whys-progress .dot.done{ background: var(--accent); }
+  .why-q{ font-size:16px; font-weight:600; margin-bottom:14px; }
+  .why-options{ display:flex; flex-direction:column; gap:10px; }
+  .why-opt{
+    text-align:left; padding:13px 16px; border-radius:10px; border:1px solid var(--border);
+    background: var(--panel-hi); color: var(--text); cursor:pointer; font-family: var(--font-display); font-size:14px;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  .why-opt:hover{ border-color: var(--accent); }
+  .why-opt.correct-pick{ border-color: var(--good); background: rgba(61,220,132,0.10); }
+  .why-opt.wrong-pick{ border-color: var(--bad); background: rgba(255,93,108,0.10); }
+  .why-feedback{ margin-top:14px; padding:12px 14px; border-radius:0 8px 8px 0; font-size:13.5px; border-left:3px solid var(--border); background: var(--panel-hi); }
+  .why-feedback.ok{ border-left-color: var(--good); }
+  .why-feedback.no{ border-left-color: var(--bad); }
+  .root-cause-final{ margin-top:18px; padding:16px; border-radius:10px; background: var(--accent-soft); border:1px solid var(--accent-dim); }
+
+  /* Release decision */
+  .release-stats{ display:grid; grid-template-columns: repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin: 14px 0 20px; }
+  .release-stats .box{ background: var(--panel-hi); border:1px solid var(--border); border-radius:10px; padding:12px; text-align:center; }
+  .release-stats .box .n{ font-family: var(--font-mono); font-size:20px; font-weight:700; }
+  .release-stats .box.crit .n{ color: var(--bad); }
+  .release-stats .box .l{ font-size:10.5px; color: var(--muted); text-transform:uppercase; margin-top:4px; }
+  .release-choices{ display:flex; flex-direction:column; gap:10px; margin-top:6px; }
+  .release-choice{ text-align:left; padding:14px 16px; border-radius:10px; border:1px solid var(--border); background: var(--panel-hi); color:var(--text); cursor:pointer; font-family: var(--font-display); font-size:14px; }
+  .release-choice:hover{ border-color: var(--accent); }
+  .release-choice b{ display:block; margin-bottom:3px; }
+
+  @media (max-width: 620px){
+    .version-row{ grid-template-columns: 1fr; }
+    .version-date{ text-align:left; }
+    select{ min-width: 100%; }
+  }
+</style>
+</head>
+<body class="era-1">
+<div class="scanlines"></div>
+<div class="vignette"></div>
+<div id="app"></div>
+
+<script>
+/* =========================================================
+   QA TIME MACHINE: DEBUG THE PAST
+   ========================================================= */
+
+const LEVELS = [
+{
+  era: 1, eraKey: "era-1", eraName: "Junior Tester Era",
+  eraTagline: "Manual regression, sharp eyes, no shortcuts.",
+  caseTitle: "The Discount Code That Never Worked",
+  briefing: "Support is drowning in tickets: customers say their discount codes 'just don't work,' even when typed exactly as emailed. Your job: walk the release log, cross-reference the complaints and the manual test sheet, and name the exact release where this checkout bug was introduced.",
+  versions: [
+    { id:"v1.0", date:"Jan 03", tag:"feature", desc:"Initial checkout release. Discount code input added to UI, but backend validation is stubbed out (feature flag OFF)." },
+    { id:"v1.1", date:"Jan 17", tag:"feature", desc:"Discount validation wired to backend. Basic check: code must be 6-10 characters, any case accepted." },
+    { id:"v1.2", date:"Jan 24", tag:"feature", desc:"Added currency selector (USD/EUR/GBP) to checkout summary." },
+    { id:"v1.3", date:"Feb 02", tag:"refactor", desc:"Refactored discount validation to a stricter regex supporting alphanumeric codes: ^[A-Z0-9]{6,10}$." },
+    { id:"v1.4", date:"Feb 09", tag:"chore", desc:"Copy update: placeholder text changed from 'Code' to 'Enter discount code'." },
+    { id:"v1.5", date:"Feb 20", tag:"feature", desc:"Added loyalty points banner above the discount field." }
+  ],
+  complaints: [
+    { meta:"Ticket #4471 — filed Feb 05", body:"\u201cI copy-pasted the code from your email, SAVE10off, and it says invalid. I've tried three times.\u201d" },
+    { meta:"Ticket #4483 — filed Feb 06", body:"\u201cMy code worked fine two weeks ago for a friend but now it just won't apply for me.\u201d" },
+    { meta:"Ticket #4502 — filed Feb 11", body:"\u201cWhy does the field even say 'Enter discount code' if it doesn't take lowercase letters? Nothing in the email said to use caps.\u201d" }
+  ],
+  tests: {
+    columns: ["v1.0","v1.1","v1.2","v1.3","v1.4","v1.5"],
+    rows: [
+      { name:"TC-11: Apply valid code, UPPERCASE (SAVE10OFF)", results:["fail","pass","pass","pass","pass","pass"] },
+      { name:"TC-12: Apply valid code, lowercase (save10off)", results:["fail","pass","pass","fail","fail","fail"] },
+      { name:"TC-13: Apply expired code (shows error)", results:["fail","pass","pass","pass","pass","pass"] }
+    ],
+    note: "TC-12 is the tell: it passes through v1.1 and v1.2, then flips to fail starting at one specific release and never recovers."
+  },
+  culprit: "v1.3",
+  hint: "Ignore v1.0 — the feature wasn't even live yet, so it can't be where a working feature broke. Find the release where TC-12 flips from pass to fail.",
+  explain: {
+    correct: "v1.3 tightened the validation regex to ^[A-Z0-9]{6,10}$, which silently rejects any lowercase input. Customers who typed codes exactly as emailed (lowercase) started failing validation from this release onward — confirmed by TC-12 flipping to fail at v1.3 and staying broken through v1.5.",
+    wrong: {
+      "v1.0": "Too early — the discount feature was stubbed out here, not broken. There's no working behavior yet to regress from.",
+      "v1.1": "This is where the feature first works, and TC-12 passes here. The bug hasn't been introduced yet.",
+      "v1.2": "A currency selector was added, but the test grid shows TC-12 still passing at v1.2. Nothing here touches validation logic.",
+      "v1.4": "This is a copy/placeholder-text change only, filed after the regex refactor. TC-12 was already failing before this release — the copy change is a coincidence, not the cause.",
+      "v1.5": "By this point the bug has existed for two releases already. This is a downstream symptom point, not the origin."
+    }
+  },
+  lesson: "Bisection mindset: when a defect exists 'somewhere in history,' don't guess — find the last known-good version and the first known-bad version, then narrow the gap. A test case flipping from pass to fail across a version grid is one of the most reliable ways to pinpoint a regression's true origin.",
+  whys: [
+    { q: "Why are customers' discount codes being rejected as invalid?", options:[
+        "Because the code they typed doesn't pass the checkout page's current validation rule.",
+        "Because the discount codes have all expired.",
+        "Because the checkout page is down."
+      ], correct:0,
+      feedback:["Right — TC-13 (expired codes) behaves consistently across every version, so expiry isn't the issue. The failure is specifically about *valid* codes being rejected.",
+        "The test grid shows expired-code handling (TC-13) working the same at every version — that's not what changed.",
+        "There's no evidence of an outage; the page loads and processes other fields fine."] },
+    { q: "Why does the current validation rule reject these specific codes?", options:[
+        "Because the validation regex only accepts uppercase letters and digits.",
+        "Because the codes are too short.",
+        "Because the customer's browser is outdated."
+      ], correct:0,
+      feedback:["Right — ^[A-Z0-9]{6,10}$ has no lowercase range, so any lowercase input fails the pattern regardless of length.",
+        "Length isn't the issue — SAVE10off is within the 6-10 character range; it fails on case, not length.",
+        "No browser-specific pattern appears anywhere in the tickets or test data."] },
+    { q: "Why does the regex only accept uppercase?", options:[
+        "Because v1.3 refactored validation to a stricter case-sensitive pattern.",
+        "Because it was always written that way since v1.0.",
+        "Because of a typo in the marketing email template."
+      ], correct:0,
+      feedback:["Right — this is exactly the change introduced at v1.3, replacing the looser v1.1 rule.",
+        "v1.1's rule accepted any case — this got stricter later, it wasn't always this way.",
+        "The email template isn't part of the codebase under investigation, and tickets show correctly-cased codes still failing."] },
+    { q: "Why wasn't this caught before it reached customers?", options:[
+        "Because the regression suite only tested uppercase codes, not lowercase input.",
+        "Because there was no test suite at all at this stage.",
+        "Because the bug only affects one specific customer's account."
+      ], correct:0,
+      feedback:["Right — TC-11 (uppercase) was covered and always passed, but there was no lowercase equivalent until this investigation, so the gap shipped silently.",
+        "A test suite existed (TC-11, TC-12, TC-13) — the gap was in *coverage*, not total absence of testing.",
+        "The complaints span multiple unrelated customers, so it isn't account-specific — it's a systemic input-case issue."] }
+  ],
+  rootCauseStatement: "Root cause: the v1.3 validation refactor introduced an undocumented case-sensitivity requirement, and the regression suite had no lowercase test case to catch it before release."
+},
+{
+  era: 2, eraKey: "era-2", eraName: "Automation Era",
+  eraTagline: "CI pipelines, commit diffs, and flaky-looking failures.",
+  caseTitle: "The Login Suite That Randomly Falls Apart",
+  briefing: "Your smoke test suite for login has become 'flaky' — it passes most runs but fails intermittently in longer CI pipelines. The team is tempted to just add a retry and move on. Read the commit history and CI logs, and name the commit that actually caused this.",
+  versions: [
+    { id:"c101", date:"Mar 01", tag:"feature", desc:"Add rate limiting to /login endpoint: block requests for 60s after 5 failed attempts from the same IP." },
+    { id:"c102", date:"Mar 04", tag:"refactor", desc:"Reduce session token expiry from 24 hours to 15 minutes, as part of a security hardening pass." },
+    { id:"c103", date:"Mar 06", tag:"chore", desc:"Restyle login page CSS to match new brand guidelines." },
+    { id:"c104", date:"Mar 09", tag:"feature", desc:"Add 'Remember me' checkbox to login form (does not change token lifetime)." }
+  ],
+  complaints: [
+    { meta:"CI Build #2290 — Mar 07", body:"Full regression suite (42 min runtime) failed 6 tests mid-run with 'session expired' errors on steps that reused a token generated at the start of the run." },
+    { meta:"CI Build #2301 — Mar 10", body:"Short smoke suite (4 min runtime) passed cleanly. Full regression suite still intermittently fails, always on tests that run past the ~15 minute mark." },
+    { meta:"CI Build #2308 — Mar 12", body:"Engineer note: 'Getting 401s deep into long test runs, token seems to just die mid-suite. Not consistent — depends how long the suite takes.'" }
+  ],
+  tests: {
+    columns: ["c101","c102","c103","c104"],
+    rows: [
+      { name:"Smoke: single login + immediate action (<1 min)", results:["pass","pass","pass","pass"] },
+      { name:"Regression: login once, reuse token for 20+ min of steps", results:["pass","fail","fail","fail"] },
+      { name:"Load test: 6 rapid failed logins from one IP (expects 429)", results:["pass","pass","pass","pass"] }
+    ],
+    note: "The rate-limit test (row 3) passes at every commit. It's the long-running regression test (row 2) that flips."
+  },
+  culprit: "c102",
+  hint: "The failure pattern is 'tests that run past ~15 minutes fail with session errors' — not 'tests that fail 5 logins in a row.' Match the failure shape to the change, not just to what sounds risky.",
+  explain: {
+    correct: "c102 cut the session token lifetime from 24h to 15 minutes. Short smoke tests never notice, but the full regression suite runs long enough that tokens generated early in the run expire before later steps use them — producing exactly the intermittent 'flaky' 401/session-expired pattern described in the CI logs.",
+    wrong: {
+      "c101": "Rate limiting only triggers after 5 failed logins from one IP in 60 seconds. The load test confirms this works correctly at every commit — it doesn't match the 'long-running test' failure pattern.",
+      "c103": "A pure CSS/styling change. It doesn't touch authentication or sessions, and the regression suite was already failing by the time this landed.",
+      "c104": "A UI checkbox addition that doesn't alter token lifetime. This shipped after the regression suite was already broken, so it can't be the origin."
+    }
+  },
+  lesson: "'Flaky test' is often a diagnosis of convenience. A test that fails intermittently under load or over time is frequently telling you something true about a real timing-sensitive regression — the fix isn't always a retry, it's tracing the failure shape back to the exact change that altered timing assumptions.",
+  whys: [
+    { q: "Why do long CI regression runs fail with session-expired errors?", options:[
+        "Because the login token generated at the start of the run is no longer valid by the time later steps use it.",
+        "Because the CI server runs out of memory during long runs.",
+        "Because the rate limiter blocks the test IP."
+      ], correct:0,
+      feedback:["Right — the failures are 401s tied to token reuse, not memory errors or blocked requests.",
+        "No memory-related errors appear in any log; the failures are specifically 'session expired' / 401s.",
+        "The load test confirms rate limiting only fires after 5 failed attempts in 60s — that's not what's happening in the regression suite."] },
+    { q: "Why is the token no longer valid partway through a run?", options:[
+        "Because token expiry was shortened from 24 hours to 15 minutes.",
+        "Because the token was never saved correctly by the test framework.",
+        "Because the 'Remember me' checkbox invalidates old tokens."
+      ], correct:0,
+      feedback:["Right — a 15-minute expiry means any test step running past that window with a reused token will fail exactly like this.",
+        "The token works fine for the first ~15 minutes across every commit — the mechanism is intact, its lifetime just isn't long enough anymore.",
+        "The 'Remember me' feature (c104) doesn't touch expiry logic and shipped after the failures began."] },
+    { q: "Why was token expiry shortened?", options:[
+        "A security hardening commit (c102) reduced session lifetime to limit exposure from stolen tokens.",
+        "It was an accidental typo in a config file.",
+        "It was requested by the design team as part of a UI refresh."
+      ], correct:0,
+      feedback:["Right — this was an intentional security tradeoff, not an accident, which is exactly why it needs to be evaluated against test infrastructure impact rather than just reverted blindly.",
+        "The commit message and intent describe a deliberate security hardening pass, not a config typo.",
+        "c103 was the UI/CSS refresh, and it doesn't touch token logic at all."] },
+    { q: "Why wasn't this caught before it hit the full regression suite in CI?", options:[
+        "Because only short smoke tests (<1 min) were run before merging, which never reach the 15-minute expiry boundary.",
+        "Because there were no automated tests at all for login.",
+        "Because the QA team was not informed of the security change."
+      ], correct:0,
+      feedback:["Right — the smoke suite exists and passes every time; the gap is that it's too short to expose a 15-minute timing boundary.",
+        "Automated tests clearly exist (smoke, regression, load) — the gap is coverage duration, not absence of testing.",
+        "This may be true operationally, but the technical root cause is the mismatch between test run length and token lifetime, not a communication issue."] }
+  ],
+  rootCauseStatement: "Root cause: shortening session expiry to 15 minutes for security reasons wasn't validated against test suites that run longer than that window — a real timing regression, not test flakiness."
+},
+{
+  era: 3, eraKey: "era-3", eraName: "AI Testing Era",
+  eraTagline: "Auto-generated tests, self-healing locators, and AI flags that aren't always right.",
+  caseTitle: "The Checkout Total That's Off By Cents",
+  briefing: "Your AI test copilot has flagged FOUR recent changes as 'anomalous' after a customer in Germany reported their checkout total was a few cents wrong. AI flags are a starting point, not a verdict — cross-reference them against the actual failing locale and test data before you accuse anything.",
+  versions: [
+    { id:"a201", date:"May 02", tag:"ai", desc:"AI self-healing locator update: 'Total' element selector auto-repaired after a DOM class rename. No logic changed." },
+    { id:"a202", date:"May 05", tag:"refactor", desc:"Migrated tax calculation to a new regional tax-rate API; switched rounding from round-to-nearest-cent to floor-to-cent for computed tax amounts." },
+    { id:"a203", date:"May 08", tag:"chore", desc:"Added a 300ms loading-skeleton animation before the order summary renders." },
+    { id:"a204", date:"May 11", tag:"ai", desc:"AI auto-generated a new regression test case for the EUR/Germany locale, expanding coverage beyond the existing USD suite." }
+  ],
+  complaints: [
+    { meta:"Ticket #7710 — filed May 12 (Germany)", body:"\u201cI was charged \u20ac1.03 more in tax than the receipt subtotal implies. Small, but it's wrong every single time.\u201d" },
+    { meta:"AI Copilot Flag — May 08", body:"'Anomaly detected: render timing shifted +300ms on checkout summary. Confidence: cosmetic, not logic-affecting.'" },
+    { meta:"AI Copilot Flag — May 05", body:"'Anomaly detected: tax computation output values changed for EUR/GBP locales. Confidence: requires human review.'" }
+  ],
+  tests: {
+    columns: ["a201","a202","a203","a204"],
+    rows: [
+      { name:"US locale: checkout total matches expected", results:["pass","pass","pass","pass"] },
+      { name:"EUR/Germany locale: checkout total matches expected", results:["pass","fail","fail","fail"] },
+      { name:"'Total' element found by automation (locator health)", results:["pass","pass","pass","pass"] }
+    ],
+    note: "The locator-health test never fails. The EUR total test flips to fail exactly once, and stays failed."
+  },
+  culprit: "a202",
+  hint: "One of the AI's own flags rates itself as 'cosmetic, not logic-affecting.' Don't let an AI anomaly flag substitute for checking which test case actually fails, and in which locale.",
+  explain: {
+    correct: "a202 changed tax rounding from round-to-nearest-cent to floor-to-cent when migrating to the new regional tax API. This produces a small, consistent discrepancy that only surfaces in locales with non-trivial tax math — exactly matching the Germany complaint and the EUR test flipping to fail at this exact commit.",
+    wrong: {
+      "a201": "This is a locator self-heal with no logic change — the locator-health test confirms it never breaks, and it happened before the EUR test even existed to catch the bug.",
+      "a203": "A 300ms animation delay is purely cosmetic. The AI's own flag rated this 'cosmetic, not logic-affecting' — and the EUR total was already failing before this commit landed.",
+      "a204": "This commit only adds a new test case; it doesn't change product logic. It's how the bug was *discovered*, not how it was *introduced*."
+    }
+  },
+  lesson: "AI-generated tests and AI anomaly flags are evidence, not verdicts. Treat an AI flag like a tip from a junior teammate: useful for narrowing where to look, but you still confirm root cause against real test data before naming a suspect.",
+  whys: [
+    { q: "Why is the Germany checkout total off by a small, consistent amount?", options:[
+        "Because tax is being rounded down (floor) instead of to the nearest cent.",
+        "Because the currency symbol is displayed incorrectly.",
+        "Because the 'Total' element on the page can't be found by automation."
+      ], correct:0,
+      feedback:["Right — a floor-rounding rule will always undercharge or misstate tax by a small, consistent amount, matching the complaint exactly.",
+        "The complaint is about the numeric amount being wrong, not a display/formatting issue with the currency symbol.",
+        "The locator-health test passes at every single commit — automation can find the element fine; this isn't a UI-detection issue."] },
+    { q: "Why did tax rounding change?", options:[
+        "a202 migrated tax calculation to a new regional tax API that floors instead of rounds.",
+        "a201's locator self-heal accidentally altered the tax logic.",
+        "a204's new EUR test case changed how tax is calculated."
+      ], correct:0,
+      feedback:["Right — this is the exact change described in a202's commit message, and it's the only commit that touches calculation logic.",
+        "a201 only changed a UI element selector, never touching backend calculation — self-healing locators don't rewrite business logic.",
+        "a204 only added a test case to check behavior — adding a test doesn't change what the product actually calculates."] },
+    { q: "Why did the AI flag THREE other commits as anomalous if only one caused the bug?", options:[
+        "Because AI anomaly detection flags any observable change (timing, DOM, new coverage) without confirming it affects the actual failing behavior.",
+        "Because the AI was deliberately trying to mislead the QA team.",
+        "Because all four commits are equally responsible for the bug."
+      ], correct:0,
+      feedback:["Right — this is exactly why AI flags need human correlation against real failing test data (locale + specific test case) before naming a root cause.",
+        "There's no evidence of intent here — the AI is pattern-matching on any detectable change, not reasoning about causality.",
+        "The test grid clearly shows only one commit (a202) is where the EUR total test flips from pass to fail."] },
+    { q: "Why wasn't this caught before reaching customers?", options:[
+        "Because regression coverage only existed for the US locale until a204 added EUR coverage — after the bug had already shipped.",
+        "Because there was no automated testing on checkout at all.",
+        "Because the bug only affects test accounts, not real customers."
+      ], correct:0,
+      feedback:["Right — the US-only test suite passed at every commit because the rounding difference doesn't surface in USD math the same way; the coverage gap is locale-specific.",
+        "An automated suite clearly existed (US locale tests, locator-health tests) — the gap was in locale coverage, not total absence of testing.",
+        "Ticket #7710 confirms a real customer in Germany was charged incorrectly — this is a live production issue, not a test-only artifact."] }
+  ],
+  rootCauseStatement: "Root cause: migrating tax logic to floor-rounding without locale-specific regression coverage let a real calculation bug ship silently — three AI flags were noise pointing at the same neighborhood, not the culprit itself."
+},
+{
+  era: 4, eraKey: "era-4", eraName: "QA Lead Era",
+  eraTagline: "Synthesizing every era's evidence into one root-cause call — and a release decision.",
+  caseTitle: "The Mobile Safari Crash Everyone Blamed on Something Else",
+  briefing: "Checkout is crashing on mobile Safari after long sessions, and it slipped all the way to production. Three different changes are all plausible-sounding suspects. As QA Lead, your job isn't just to find a cause — it's to separate the true root cause from the process failures that let it hide, then make the release call.",
+  versions: [
+    { id:"r301", date:"Feb (Junior Era)", tag:"feature", desc:"Added a live inventory WebSocket connection on the checkout page to show 'X people viewing this item' in real time. Connection is opened on page load; no explicit close/cleanup handler was written." },
+    { id:"r302", date:"Apr (Automation Era)", tag:"chore", desc:"CI stability pass: added automatic retry (up to 3x) for any test step that times out or throws, to 'reduce noise' in nightly runs." },
+    { id:"r303", date:"Jun (AI Era)", tag:"ai", desc:"AI test-triage system auto-quarantined 'checkout_long_session_mobile' after it failed inconsistently 3 nights in a row, removing it from the blocking suite pending review." }
+  ],
+  complaints: [
+    { meta:"Ticket #9012 — filed Jul 02", body:"\u201cSafari on my iPhone freezes and crashes if I leave a product page open for a while before checking out.\u201d" },
+    { meta:"Internal Postmortem Note", body:"Memory profiling shows steadily climbing memory usage on the checkout page over time, tracing back to an open WebSocket connection that is never closed when the page unmounts." },
+    { meta:"QA Retro Note", body:"'checkout_long_session_mobile' had actually been failing since r301, but the auto-retry (r302) usually passed it on attempt 2 or 3, and it was later quarantined (r303) instead of investigated — so nobody looked closely for months." }
+  ],
+  tests: {
+    columns: ["r301","r302","r303"],
+    rows: [
+      { name:"checkout_long_session_mobile (true underlying result)", results:["fail","fail","fail"] },
+      { name:"checkout_long_session_mobile (as reported in CI dashboard)", results:["fail","pass*","quarantined"] },
+      { name:"Memory usage on checkout page over 10 min session", results:["climbing","climbing","climbing"] }
+    ],
+    note: "*r302's 'pass' is misleading — retries let a genuinely failing test report green on attempt 2 or 3. The underlying defect never actually resolves; it just gets progressively better hidden."
+  },
+  culprit: "r301",
+  hint: "Ask which change actually altered application behavior on the page (a real code change causing a leak) versus which changes altered how failures were reported (retries, quarantine). Only one of the three is a product defect.",
+  explain: {
+    correct: "r301 is the true root cause: opening a WebSocket connection on checkout with no cleanup on unmount causes an unbounded memory leak on long sessions, matching both the crash reports and the climbing memory profile. r302 (auto-retry) and r303 (auto-quarantine) are real, common process failures — but they're masking mechanisms that delayed detection for months, not the origin of the defect.",
+    wrong: {
+      "r302": "Auto-retry is a masking factor, not the defect — it explains why a genuinely-failing test started showing green in CI, but the underlying test was failing before this change existed.",
+      "r303": "Auto-quarantine is why nobody re-investigated the test for months — another process failure that delayed discovery. But quarantining a test doesn't create a memory leak; it only hides one that already existed."
+    }
+  },
+  lesson: "Root cause analysis means separating three layers: (1) the defect itself, (2) the process gaps that let it reach production undetected, and (3) the symptom that finally got someone's attention. A great QA Lead calls out all three — but only names one of them as the actual root cause.",
+  whys: [
+    { q: "Why does mobile Safari crash on the checkout page during long sessions?", options:[
+        "Because memory usage on the page climbs continuously until the browser kills the tab.",
+        "Because the page makes too many network requests.",
+        "Because the 'Remember me' feature stores too much data."
+      ], correct:0,
+      feedback:["Right — the postmortem memory profile shows steadily climbing usage, and mobile Safari is known to kill tabs that exceed memory limits.",
+        "Nothing in the evidence points to request volume — the profile specifically calls out memory, not network activity.",
+        "There's no 'Remember me' feature in this case's evidence — that was a different case entirely."] },
+    { q: "Why does memory keep climbing?", options:[
+        "Because an open WebSocket connection is never closed when the page unmounts.",
+        "Because images on the page aren't compressed.",
+        "Because the CI pipeline is leaking memory."
+      ], correct:0,
+      feedback:["Right — this is exactly what the postmortem traces the leak to: an unclosed WebSocket held open indefinitely.",
+        "Image compression isn't mentioned anywhere in the evidence — the postmortem specifically names the WebSocket connection.",
+        "CI pipeline memory has nothing to do with what happens in a customer's mobile browser — those are separate systems."] },
+    { q: "Why was the WebSocket never closed?", options:[
+        "Because r301 added the live-viewer feature without writing a cleanup/unmount handler.",
+        "Because r302's auto-retry logic prevents connections from closing.",
+        "Because r303's quarantine rule disabled the cleanup code."
+      ], correct:0,
+      feedback:["Right — this is the original defect: a feature was shipped without the cleanup step that would close the connection when the user navigates away.",
+        "Auto-retry affects test reporting behavior in CI, not runtime connection handling in the shipped product.",
+        "Quarantine only affects whether a test blocks a CI pipeline — it can't reach into and disable production cleanup code."] },
+    { q: "Why did this go undetected for months despite an existing test for it?", options:[
+        "Because auto-retry let the failing test report green, and auto-quarantine then removed it from visibility entirely.",
+        "Because there was no test for this scenario at all.",
+        "Because QA leadership was never told about the feature launch."
+      ], correct:0,
+      feedback:["Right — this is the process-failure layer: two separate shortcuts (retry, then quarantine) compounded to hide a real, consistently-failing test from anyone's attention.",
+        "A test named 'checkout_long_session_mobile' clearly existed and was failing since r301 — the gap was in how failures were handled, not a missing test.",
+        "This may or may not be true, but the technical chain of causation runs through retry-masking and quarantine, which is what the evidence directly supports."] }
+  ],
+  rootCauseStatement: "Root cause: a missing WebSocket cleanup handler (r301) caused a real memory leak, while two well-intentioned process shortcuts (auto-retry, auto-quarantine) independently masked it from detection for months."
+}
+];
+
+const RELEASE_DECISION = {
+  stats: { total: 2500, passed: 2430, failed: 70, critical: 1, releaseDate: "Tomorrow" },
+  context: "The WebSocket memory-leak defect you just root-caused (r301) is this build's one open critical bug. Engineering says a proper fix needs 2 more days, but a quick mitigation — disabling the live-viewer feature via feature flag — could ship today.",
+  choices: [
+    {
+      id: "release",
+      label: "Release as scheduled",
+      detail: "Ship tomorrow with the critical bug still open and no mitigation.",
+      good: false,
+      feedback: "Shipping a known, reproducible crash on mobile Safari with a clear root cause and no mitigation isn't an acceptable risk call — this is a preventable outage, not a judgment call. A known critical defect with a diagnosed cause should not go out silently."
+    },
+    {
+      id: "block",
+      label: "Block the release",
+      detail: "Hold the release until engineering ships the full WebSocket cleanup fix.",
+      good: true,
+      feedback: "This is the safest call: you have a known, reproducible, root-caused critical defect. Holding the release until it's actually fixed avoids shipping a confirmed crash to every mobile Safari user on a long session."
+    },
+    {
+      id: "mitigate",
+      label: "Ship with documented risk acceptance + mitigation",
+      detail: "Disable the live-viewer feature flag for this release, document the known issue, and commit engineering to a hotfix within 48 hours.",
+      good: true,
+      feedback: "This is how many real QA Leads operate under deadline pressure: you don't always get to block a release outright, but you can insist on a concrete mitigation (feature-flagging off the leaking connection), a documented, signed-off risk acceptance, and a committed hotfix timeline rather than silently shipping the bug."
+    }
+  ]
+};
+
+const RANKS = [
+  { min: 0, title: "QA Intern", emoji: "🐣", note: "Root-cause hunting is a skill you build one bisection at a time — review the case files again." },
+  { min: 1, title: "Junior Tester", emoji: "🧪", note: "You can spot a bug. Next: build the habit of checking every suspect against the evidence before naming one." },
+  { min: 2, title: "Automation Engineer", emoji: "⚙️", note: "Solid instinct for matching failure patterns to changes — keep questioning what 'flaky' really means." },
+  { min: 3, title: "AI QA Specialist", emoji: "🤖", note: "You know not to trust a flag just because it's confident. That skepticism is the job." },
+  { min: 4, title: "QA Lead", emoji: "👑", note: "You separated root cause from masking factors across every era, and made the release call. That's the whole craft." }
+];
+
+let state = {
+  levelIndex: 0,
+  score: 0,
+  activeTab: 'versions',
+  hintUsed: [false,false,false,false],
+  firstTryCorrect: [null,null,null,null],
+  selectedGuess: null,
+  screen: 'intro', // intro | briefing | board | verdict | whys | releaseDecision | final
+  whysStep: 0,
+  whysPickedWrong: [],
+  releaseChoice: null,
+  releaseScore: 0
+};
+
+const app = document.getElementById('app');
+
+function render(){
+  const lvl = LEVELS[state.levelIndex];
+  document.body.className = lvl ? lvl.eraKey : 'era-4';
+  if(state.screen === 'intro') return renderIntro();
+  if(state.screen === 'briefing') return renderBriefing(lvl);
+  if(state.screen === 'board') return renderBoard(lvl);
+  if(state.screen === 'verdict') return renderVerdict(lvl);
+  if(state.screen === 'whys') return renderWhys(lvl);
+  if(state.screen === 'releaseDecision') return renderReleaseDecision();
+  if(state.screen === 'final') return renderFinal();
+}
+
+function timelineBar(){
+  let progressPct = 0;
+  if(state.screen === 'final'){ progressPct = 100; }
+  else { progressPct = (state.levelIndex / 3) * 100; }
+
+  let nodes = LEVELS.map((l,i) => {
+    let cls = 'era-node';
+    if(state.screen === 'final' || i < state.levelIndex) cls += ' done';
+    else if(i === state.levelIndex && state.screen !== 'intro') cls += ' active';
+    return `<div class="${cls}"><div class="era-dot"></div><div class="era-label">${l.eraName.replace(' Era','')}</div></div>`;
+  }).join('<div class="timeline-track" style="--progress:0%"></div>');
+
+  return `<div class="timeline-bar" style="--progress:${progressPct}%">${nodes}</div>`;
+}
+
+function brandBar(){
+  return `<div class="brand">
+    <h1>QA <span>TIME MACHINE</span></h1>
+    <div class="score">SCORE <b>${state.score}</b></div>
+  </div>`;
+}
+
+function renderIntro(){
+  app.innerHTML = `
+    ${brandBar()}
+    ${timelineBar()}
+    <div class="card">
+      <div class="eyebrow">Mission Briefing</div>
+      <h2>Debug the Past</h2>
+      <p class="lead">
+        Somewhere in the history of this product, a bug was born. Not where it was <em>reported</em> — where it was
+        <em>introduced</em>. You'll travel through four eras of QA practice, each with its own tools and its own way
+        of lying to you. Read the version log. Read the complaints. Read the test grid. Name the exact version
+        where things went wrong, then trace it back through a Root Cause Chain — and in the final era, make the
+        release call.
+      </p>
+      <p class="lead">
+        Four eras await: <strong>Junior Tester</strong>, <strong>Automation</strong>, <strong>AI Testing</strong>,
+        and <strong>QA Lead</strong>. The interface itself will change as you go — testing practice matures, and so
+        does the noise you'll have to see through.
+      </p>
+      <div class="btn-row">
+        <button class="btn" onclick="startGame()">Begin Investigation</button>
+      </div>
+    </div>
+  `;
+}
+
+function startGame(){ state.screen = 'briefing'; render(); }
+
+function renderBriefing(lvl){
+  app.innerHTML = `
+    ${brandBar()}
+    ${timelineBar()}
+    <div class="card">
+      <div class="eyebrow">Era ${lvl.era} — ${lvl.eraName}</div>
+      <h2>${lvl.caseTitle}</h2>
+      <p class="lead" style="margin-bottom:4px;"><em>${lvl.eraTagline}</em></p>
+      <p class="lead">${lvl.briefing}</p>
+      <div class="btn-row">
+        <button class="btn" onclick="openBoard()">Open Evidence Board</button>
+      </div>
+    </div>
+  `;
+}
+
+function openBoard(){ state.screen = 'board'; state.activeTab = 'versions'; state.selectedGuess = null; render(); }
+function setTab(tab){ state.activeTab = tab; render(); }
+
+function renderBoard(lvl){
+  const tabs = ['versions','complaints','tests'];
+  const tabLabels = { versions: 'Version Log', complaints: 'Complaints & Signals', tests: 'Test Grid' };
+
+  let tabContent = '';
+  if(state.activeTab === 'versions'){
+    tabContent = lvl.versions.map(v => `
+      <div class="version-row">
+        <div class="version-id">${v.id}</div>
+        <div><div class="version-desc">${v.desc}</div><span class="tag ${v.tag}">${v.tag}</span></div>
+        <div class="version-date">${v.date}</div>
+      </div>`).join('');
+  } else if(state.activeTab === 'complaints'){
+    tabContent = lvl.complaints.map(c => `
+      <div class="ticket"><div class="ticket-meta">${c.meta}</div><div class="ticket-body">${c.body}</div></div>`).join('');
+  } else if(state.activeTab === 'tests'){
+    const cols = lvl.tests.columns;
+    let header = `<tr><th class="name">Test Case</th>${cols.map(c=>`<th>${c}</th>`).join('')}</tr>`;
+    let rows = lvl.tests.rows.map(r => {
+      let cells = r.results.map(res => {
+        let cls = res === 'pass' ? 'pass' : (res === 'fail' ? 'fail' : '');
+        let label = res === 'pass' ? 'PASS' : (res === 'fail' ? 'FAIL' : res.toUpperCase());
+        return `<td class="${cls}">${label}</td>`;
+      }).join('');
+      return `<tr><td class="name">${r.name}</td>${cells}</tr>`;
+    }).join('');
+    tabContent = `<table class="testgrid">${header}${rows}</table><div class="test-note">${lvl.tests.note}</div>`;
+  }
+
+  const options = lvl.versions.map(v => `<option value="${v.id}">${v.id}</option>`).join('');
+  let hintHtml = '';
+  if(state.hintUsed[state.levelIndex]){
+    hintHtml = `<div class="hint-box"><strong>Hint:</strong> ${lvl.hint}</div>`;
+  }
+
+  app.innerHTML = `
+    ${brandBar()}
+    ${timelineBar()}
+    <div class="card">
+      <div class="eyebrow">Era ${lvl.era} — ${lvl.caseTitle}</div>
+      <div class="tabs">${tabs.map(t => `<div class="tab ${state.activeTab===t?'active':''}" onclick="setTab('${t}')">${tabLabels[t]}</div>`).join('')}</div>
+      <div>${tabContent}</div>
+    </div>
+    <div class="card">
+      <div class="eyebrow">Name the Origin</div>
+      <p class="lead" style="margin-top:0;">Which version or commit is where this bug was truly introduced?</p>
+      <div class="accuse-box">
+        <select id="guessSelect">
+          <option value="" disabled selected>Select a suspect...</option>
+          ${options}
+        </select>
+        <button class="btn" onclick="submitGuess()">Accuse</button>
+        <button class="btn secondary" onclick="useHint()" ${state.hintUsed[state.levelIndex] ? 'disabled' : ''}>${state.hintUsed[state.levelIndex] ? 'Hint Used (-20)' : 'Use Hint (-20 pts)'}</button>
+      </div>
+      ${hintHtml}
+    </div>
+  `;
+}
+
+function useHint(){
+  if(!state.hintUsed[state.levelIndex]){ state.hintUsed[state.levelIndex] = true; state.score = Math.max(0, state.score - 20); }
+  render();
+}
+
+function submitGuess(){
+  const sel = document.getElementById('guessSelect');
+  const guess = sel.value;
+  if(!guess) return;
+  const lvl = LEVELS[state.levelIndex];
+  const correct = guess === lvl.culprit;
+
+  if(state.firstTryCorrect[state.levelIndex] === null){
+    state.firstTryCorrect[state.levelIndex] = correct;
+    if(correct){ state.score += state.hintUsed[state.levelIndex] ? 60 : 100; }
+  } else if(!correct){
+    state.score = Math.max(0, state.score - 15);
+  }
+
+  state.selectedGuess = guess;
+  state.lastCorrect = correct;
+  state.screen = 'verdict';
+  render();
+}
+
+function renderVerdict(lvl){
+  const correct = state.lastCorrect;
+  const guess = state.selectedGuess;
+  let explanationText = correct ? lvl.explain.correct : (lvl.explain.wrong[guess] || "That's not the origin point — check the test grid again for where behavior actually flips.");
+
+  app.innerHTML = `
+    ${brandBar()}
+    ${timelineBar()}
+    <div class="card">
+      <div class="verdict-banner ${correct ? 'correct' : 'wrong'}">
+        ${correct ? `✔ Correct — ${lvl.culprit} is the true origin point.` : `✘ Not quite — ${guess} isn't the root cause.`}
+      </div>
+      <p class="lead">${explanationText}</p>
+      <div class="btn-row">
+        ${correct ?
+          `<button class="btn" onclick="startWhys()">Trace the Root Cause Chain</button>`
+          :
+          `<button class="btn" onclick="backToBoard()">Back to Evidence Board</button>`
+        }
+      </div>
+    </div>
+  `;
+}
+
+function backToBoard(){ state.screen = 'board'; render(); }
+
+function startWhys(){
+  state.screen = 'whys';
+  state.whysStep = 0;
+  state.whysPickedWrong = [];
+  state.whysSelected = null;
+  render();
+}
+
+function renderWhys(lvl){
+  const stepIdx = state.whysStep;
+  const totalSteps = lvl.whys.length;
+  const finished = stepIdx >= totalSteps;
+
+  const dots = Array.from({length: totalSteps}).map((_,i) =>
+    `<div class="dot ${i < stepIdx || finished ? 'done' : ''}"></div>`
+  ).join('');
+
+  if(finished){
+    app.innerHTML = `
+      ${brandBar()}
+      ${timelineBar()}
+      <div class="card">
+        <div class="eyebrow">Root Cause Chain — Complete</div>
+        <h2>${lvl.caseTitle}</h2>
+        <div class="whys-progress">${dots}</div>
+        <div class="root-cause-final">
+          <div class="eyebrow" style="margin-bottom:8px;">Root Cause Identified</div>
+          <div>${lvl.rootCauseStatement}</div>
+        </div>
+        <div class="lesson">
+          <div class="eyebrow">QA Mindset Note</div>
+          <div>${lvl.lesson}</div>
+        </div>
+        <div class="btn-row">
+          <button class="btn" onclick="finishWhys()">${state.levelIndex === LEVELS.length - 1 ? 'Proceed to Release Decision' : 'Continue to Next Era'}</button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  const step = lvl.whys[stepIdx];
+  const picked = state.whysSelected;
+  const showFeedback = picked !== null && picked !== undefined;
+  const isCorrectPick = showFeedback && picked === step.correct;
+
+  const optionsHtml = step.options.map((opt, i) => {
+    let cls = 'why-opt';
+    if(showFeedback && i === picked){ cls += isCorrectPick ? ' correct-pick' : ' wrong-pick'; }
+    return `<div class="${cls}" onclick="pickWhy(${i})">${opt}</div>`;
+  }).join('');
+
+  let feedbackHtml = '';
+  if(showFeedback){
+    feedbackHtml = `<div class="why-feedback ${isCorrectPick ? 'ok' : 'no'}">${step.feedback[picked]}</div>`;
+  }
+
+  app.innerHTML = `
+    ${brandBar()}
+    ${timelineBar()}
+    <div class="card">
+      <div class="eyebrow">Root Cause Chain — Why ${stepIdx + 1} of ${totalSteps}</div>
+      <div class="whys-progress">${dots}</div>
+      <div class="why-q">${step.q}</div>
+      <div class="why-options">${optionsHtml}</div>
+      ${feedbackHtml}
+      <div class="btn-row">
+        ${isCorrectPick ? `<button class="btn" onclick="nextWhyStep()">${stepIdx === totalSteps - 1 ? 'See Root Cause' : 'Next Why'}</button>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+function pickWhy(i){
+  const lvl = LEVELS[state.levelIndex];
+  const step = lvl.whys[state.whysStep];
+  state.whysSelected = i;
+  if(i !== step.correct){ state.score = Math.max(0, state.score - 5); }
+  else { state.score += 15; }
+  render();
+}
+
+function nextWhyStep(){
+  state.whysStep += 1;
+  state.whysSelected = null;
+  render();
+}
+
+function finishWhys(){
+  if(state.levelIndex === LEVELS.length - 1){
+    state.screen = 'releaseDecision';
+  } else {
+    state.levelIndex += 1;
+    state.screen = 'briefing';
+  }
+  render();
+}
+
+function renderReleaseDecision(){
+  const d = RELEASE_DECISION;
+  const chosen = state.releaseChoice;
+
+  let choicesHtml = d.choices.map(c => `
+    <div class="release-choice" onclick="chooseRelease('${c.id}')">
+      <b>${c.label}</b>${c.detail}
+    </div>`).join('');
+
+  let feedbackHtml = '';
+  if(chosen){
+    const choice = d.choices.find(c => c.id === chosen);
+    feedbackHtml = `<div class="verdict-banner ${choice.good ? 'correct' : 'wrong'}">${choice.good ? '✔ Defensible call.' : '✘ Risky call.'}</div>
+      <p class="lead">${choice.feedback}</p>
+      <div class="btn-row"><button class="btn" onclick="goToFinal()">View Final Report</button></div>`;
+  }
+
+  app.innerHTML = `
+    ${brandBar()}
+    ${timelineBar()}
+    <div class="card">
+      <div class="eyebrow">QA Lead Era — Release Decision</div>
+      <h2>Ship It or Hold It?</h2>
+      <p class="lead">${d.context}</p>
+      <div class="release-stats">
+        <div class="box"><div class="n">${d.stats.total.toLocaleString()}</div><div class="l">Total Tests</div></div>
+        <div class="box"><div class="n">${d.stats.passed.toLocaleString()}</div><div class="l">Passed</div></div>
+        <div class="box"><div class="n">${d.stats.failed}</div><div class="l">Failed</div></div>
+        <div class="box crit"><div class="n">${d.stats.critical}</div><div class="l">Critical Bugs</div></div>
+        <div class="box"><div class="n">${d.stats.releaseDate}</div><div class="l">Release Date</div></div>
+      </div>
+      ${!chosen ? `<div class="release-choices">${choicesHtml}</div>` : ''}
+      ${feedbackHtml}
+    </div>
+  `;
+}
+
+function chooseRelease(id){
+  if(state.releaseChoice) return;
+  state.releaseChoice = id;
+  const choice = RELEASE_DECISION.choices.find(c => c.id === id);
+  state.releaseScore = choice.good ? 100 : 0;
+  state.score += state.releaseScore;
+  render();
+}
+
+function goToFinal(){ state.screen = 'final'; render(); }
+
+function renderFinal(){
+  const correctFirstTry = state.firstTryCorrect.filter(Boolean).length;
+  const hintsUsed = state.hintUsed.filter(Boolean).length;
+  let rank = RANKS[0];
+  for(const r of RANKS){ if(correctFirstTry >= r.min) rank = r; }
+
+  const releaseChoice = RELEASE_DECISION.choices.find(c => c.id === state.releaseChoice);
+  const releaseLabel = releaseChoice ? (releaseChoice.good ? 'Sound Call' : 'Risky Call') : 'Not Made';
+
+  app.innerHTML = `
+    ${brandBar()}
+    ${timelineBar()}
+    <div class="card">
+      <div class="eyebrow">Case Closed</div>
+      <h2>Investigation Complete</h2>
+      <div class="rank-badge">${rank.emoji} RANK: ${rank.title}</div>
+      <p class="lead">${rank.note}</p>
+      <div class="stat-grid">
+        <div class="stat"><div class="num">${state.score}</div><div class="lbl">Final Score</div></div>
+        <div class="stat"><div class="num">${correctFirstTry}/4</div><div class="lbl">First-Try Correct</div></div>
+        <div class="stat"><div class="num">${hintsUsed}</div><div class="lbl">Hints Used</div></div>
+        <div class="stat"><div class="num">${releaseLabel}</div><div class="lbl">Release Decision</div></div>
+      </div>
+      <div class="lesson">
+        <div class="eyebrow">Across All Four Eras</div>
+        <div>Whether you're reading a manual test sheet, a CI dashboard, an AI anomaly flag, or a full postmortem —
+        the job is the same: separate <em>where a defect was introduced</em> from <em>where it was noticed</em>,
+        <em>how it was reported</em>, and <em>what merely delayed detection</em>. Tools change every era. That
+        instinct — and knowing when to hold a release — doesn't.</div>
+      </div>
+      <div class="btn-row">
+        <button class="btn secondary" onclick="restartGame()">Play Again</button>
+      </div>
+    </div>
+  `;
+}
+
+function restartGame(){
+  state = {
+    levelIndex: 0, score: 0, activeTab: 'versions',
+    hintUsed: [false,false,false,false],
+    firstTryCorrect: [null,null,null,null],
+    selectedGuess: null, screen: 'intro',
+    whysStep: 0, whysPickedWrong: [], releaseChoice: null, releaseScore: 0
+  };
+  render();
+}
+
+render();
+</script>
+</body>
+</html>
